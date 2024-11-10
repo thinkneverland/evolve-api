@@ -5,38 +5,29 @@
     "version": "1.0.0",
     "authors": [
         {
-            "name": "Quincy Adams",
-            "email": "iam@quincy.codes",
-            "homepage": "https://quincy.codes"
+            "name": "Think Nneverland",
+            "email": "hello@ethinkneverland.com",
+            "homepage": "https://evolve.thinkneverland.com"
         }
     ],
     "homepage": "https://github.com/thinkneverland/evolve-api",
     "keywords": ["Laravel", "EvolveApi"],
     "require": {
-        "illuminate/support": "~9"
-    },
-    "require-dev": {
-        "phpunit/phpunit": "~9.0",
-        "orchestra/testbench": "~7"
+        "php": "^7.4|^8.0",
+        "illuminate/support": "^8.0|^9.0",
+        "evolve/core": "*",
+        "darkaonline/l5-swagger": "^8.0"
     },
     "autoload": {
         "psr-4": {
-            "Thinkneverland\\EvolveApi\\": "src/"
-        }
-    },
-    "autoload-dev": {
-        "psr-4": {
-            "Thinkneverland\\EvolveApi\\Tests\\": "tests"
+            "Thinkneverland\\Evolve\\Api\\": "src/"
         }
     },
     "extra": {
         "laravel": {
             "providers": [
-                "Thinkneverland\\EvolveApi\\EvolveApiServiceProvider"
-            ],
-            "aliases": {
-                "EvolveApi": "Thinkneverland\\EvolveApi\\Facades\\EvolveApi"
-            }
+                "Thinkneverland\\Evolve\\Api\\EvolveApiServiceProvider"
+            ]
         }
     }
 }

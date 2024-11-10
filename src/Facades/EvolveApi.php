@@ -1,6 +1,6 @@
 <?php
 
-namespace Thinkneverland\EvolveApi\Facades;
+namespace Thinkneverland\Evolve\Api\Facades;
 
 use Illuminate\Support\Facades\Facade;
 

@@ -1,6 +1,6 @@
 <?php
 
-namespace Thinkneverland\EvolveApi;
+namespace Thinkneverland\Evolve\Api;
 
 class EvolveApi
 {
