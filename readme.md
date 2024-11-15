@@ -1,3 +1,16 @@
+# EvolveAPI: Free Extension for EvolveCore
+
+EvolveAPI is a **free plugin** that extends the capabilities of the **EvolveCore** package by providing a robust API layer. It allows you to expose your models as API endpoints with minimal configuration, making it easy to integrate your application with external systems or build rich frontend experiences.
+
+> **Note:** EvolveAPI requires the **EvolveCore** package to function.  
+> [Get EvolveCore](https://evolve.thinkneverland.com) today and start building powerful APIs for your Laravel applications.
+
+### Why Use EvolveAPI?
+- Automatically generate API endpoints for your models.
+- Support for filtering, sorting, and pagination out of the box.
+- Seamless integration with EvolveCore for validation and data handling.
+
+**Visit [evolve.thinkneverland.com](https://evolve.thinkneverland.com) to learn more and get started!**
 
 # EvolveAPI Documentation
 
