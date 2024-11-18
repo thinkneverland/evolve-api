@@ -13,8 +13,6 @@
     "homepage": "https://github.com/thinkneverland/evolve-api",
     "keywords": ["Laravel", "EvolveApi"],
     "require": {
-        "php": "^7.4|^8.0",
-        "illuminate/support": "^8.0|^9.0",
         "thinkneverland/evolve-core": "*",
         "darkaonline/l5-swagger": "^8.0"
     },

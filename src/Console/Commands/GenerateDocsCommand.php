@@ -249,59 +249,68 @@ class GenerateDocsCommand extends Command
         $modelInstance = new $modelClass;
         $table = $modelInstance->getTable();
 
-        // Get the columns of the table
-        $columns = Schema::getColumnListing($table);
+        // Get the columns of the table using Schema facade directly
+        try {
+            $columns = Schema::getColumnListing($table);
+            $properties = [];
 
-        $properties = [];
+            foreach ($columns as $column) {
+                try {
+                    // Get column type
+                    $type = Schema::getColumnType($table, $column);
+                    $swaggerType = $this->mapColumnTypeToSwaggerType($type);
 
-        foreach ($columns as $column) {
-            // Get column type
-            $type = Schema::getColumnType($table, $column);
-
-            $swaggerType = $this->mapColumnTypeToSwaggerType($type);
-
-            $properties[$column] = [
-                'type' => $swaggerType,
-            ];
-        }
-
-        // Handle relationships
-        $reflection = new ReflectionClass($modelClass);
-        $methods = $reflection->getMethods(\ReflectionMethod::IS_PUBLIC);
-
-        foreach ($methods as $method) {
-            if ($method->class != $modelClass) {
-                continue;
-            }
-
-            if ($method->getNumberOfParameters() > 0) {
-                continue;
-            }
-
-            // Check if method returns a relation
-            try {
-                $return = $method->invoke($modelInstance);
-
-                if ($return instanceof \Illuminate\Database\Eloquent\Relations\Relation) {
-                    $relationName = $method->getName();
-                    $relatedModelClass = get_class($return->getRelated());
-                    $relatedModelName = class_basename($relatedModelClass);
-
-                    // Add relation to properties
-                    $properties[$relationName] = [
-                        'type' => 'object',
-                        '$ref' => '#/definitions/' . $relatedModelName,
+                    $properties[$column] = [
+                        'type' => $swaggerType,
+                    ];
+                } catch (\Exception $e) {
+                    Log::warning("Could not determine type for column {$column} in table {$table}");
+                    $properties[$column] = [
+                        'type' => 'string'
                     ];
                 }
-            } catch (\Exception $e) {
-                // Skip methods that cannot be invoked
             }
-        }
 
-        return [
-            'type' => 'object',
-            'properties' => $properties,
-        ];
+            // Handle relationships
+            $reflection = new ReflectionClass($modelClass);
+            $methods = $reflection->getMethods(\ReflectionMethod::IS_PUBLIC);
+
+            foreach ($methods as $method) {
+                if ($method->class != $modelClass || $method->getNumberOfParameters() > 0) {
+                    continue;
+                }
+
+                try {
+                    $return = $method->invoke($modelInstance);
+
+                    if ($return instanceof \Illuminate\Database\Eloquent\Relations\Relation) {
+                        $relationName = $method->getName();
+                        $relatedModelClass = get_class($return->getRelated());
+                        $relatedModelName = class_basename($relatedModelClass);
+
+                        $properties[$relationName] = [
+                            'type' => 'object',
+                            '$ref' => '#/definitions/' . $relatedModelName,
+                        ];
+                    }
+                } catch (\Exception $e) {
+                    // Skip methods that cannot be invoked
+                    continue;
+                }
+            }
+
+            return [
+                'type' => 'object',
+                'properties' => $properties,
+            ];
+
+        } catch (\Exception $e) {
+            Log::error("Failed to generate model definition for {$modelClass}: " . $e->getMessage());
+            return [
+                'type' => 'object',
+                'properties' => []
+            ];
+        }
     }
 
     protected function mapColumnTypeToSwaggerType($type)
