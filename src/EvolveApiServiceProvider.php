@@ -2,8 +2,7 @@
 
 namespace Thinkneverland\Evolve\Api;
 
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\{Log, Route};
 use Illuminate\Support\ServiceProvider;
 use Thinkneverland\Evolve\Api\Console\Commands\GenerateDocsCommand;
 
@@ -67,10 +66,17 @@ class EvolveApiServiceProvider extends ServiceProvider
         $routePrefix = config('evolve-api.route_prefix', 'evolve-api');
 
         Route::group([
-            'prefix' => $routePrefix,
+            'prefix'     => $routePrefix,
             'middleware' => ['web'], // Adjust middleware as needed
         ], function () {
             require __DIR__ . '/../routes/web.php';
+        });
+
+        Route::group([
+            'prefix'     => $routePrefix,
+            'middleware' => ['api'], // Use 'api' middleware for API routes
+        ], function () {
+            require __DIR__ . '/../routes/api.php';
         });
     }
 
@@ -88,6 +94,7 @@ class EvolveApiServiceProvider extends ServiceProvider
 
         if (!is_dir($dir)) {
             unlink($dir);
+
             return;
         }
 
@@ -97,6 +104,7 @@ class EvolveApiServiceProvider extends ServiceProvider
             }
 
             $path = "{$dir}/{$item}";
+
             if (is_dir($path)) {
                 $this->deleteDirectory($path);
             } else {
@@ -109,7 +117,7 @@ class EvolveApiServiceProvider extends ServiceProvider
     protected function cloneAndCopySwaggerUiAssets()
     {
         $targetDir = public_path('vendor/evolve-api/swagger-ui');
-        $files = [
+        $files     = [
             'swagger-ui.css',
             'swagger-ui-bundle.js',
             'swagger-ui-standalone-preset.js',
@@ -117,15 +125,18 @@ class EvolveApiServiceProvider extends ServiceProvider
 
         // Check if all required files already exist
         $allFilesExist = true;
+
         foreach ($files as $file) {
             if (!file_exists("{$targetDir}/{$file}")) {
                 $allFilesExist = false;
+
                 break;
             }
         }
 
         if ($allFilesExist) {
             Log::info('Swagger UI assets already exist. Skipping cloning and copying.');
+
             return;
         }
 
@@ -143,6 +154,7 @@ class EvolveApiServiceProvider extends ServiceProvider
 
         if ($returnVar !== 0) {
             Log::error('Failed to clone Swagger UI repository. Please ensure Git is installed and accessible.');
+
             return;
         }
 
@@ -151,6 +163,7 @@ class EvolveApiServiceProvider extends ServiceProvider
         if (!is_dir($sourceDir)) {
             Log::error("Source directory {$sourceDir} does not exist in the cloned repository.");
             $this->deleteDirectory($tempDir);
+
             return;
         }
 
@@ -160,7 +173,7 @@ class EvolveApiServiceProvider extends ServiceProvider
         }
 
         foreach ($files as $file) {
-            $sourceFile = "{$sourceDir}/{$file}";
+            $sourceFile      = "{$sourceDir}/{$file}";
             $destinationFile = "{$targetDir}/{$file}";
 
             if (file_exists($sourceFile)) {
@@ -174,5 +187,4 @@ class EvolveApiServiceProvider extends ServiceProvider
         $this->deleteDirectory($tempDir);
         Log::info('Removed temporary Swagger UI repository clone.');
     }
-
 }

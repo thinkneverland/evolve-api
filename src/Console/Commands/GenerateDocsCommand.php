@@ -3,14 +3,14 @@
 namespace Thinkneverland\Evolve\Api\Console\Commands;
 
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\{File, Schema};
 use Illuminate\Support\Str;
 use ReflectionClass;
-use Illuminate\Support\Facades\Schema;
 
 class GenerateDocsCommand extends Command
 {
     protected $signature = 'evolve-api:generate-docs';
+
     protected $description = 'Generate Swagger documentation for Evolvable models';
 
     public function handle()
@@ -35,11 +35,12 @@ class GenerateDocsCommand extends Command
     protected function getEvolvableModels()
     {
         // Scan the app's Models directory for models using the Evolvable trait
-        $models = [];
+        $models    = [];
         $modelPath = app_path('Models');
 
         if (!is_dir($modelPath)) {
             $this->error('Models directory not found at ' . $modelPath);
+
             return $models;
         }
 
@@ -71,22 +72,22 @@ class GenerateDocsCommand extends Command
         // Initialize the Swagger documentation array
         $swagger = [
             'swagger' => '2.0',
-            'info' => [
-                'title' => config('app.name') . ' API Documentation',
+            'info'    => [
+                'title'   => config('app.name') . ' API Documentation',
                 'version' => '1.0.0',
             ],
-            'host' => parse_url(config('app.url'), PHP_URL_HOST),
-            'basePath' => '/',
-            'schemes' => ['http', 'https'],
-            'paths' => [],
+            'host'        => parse_url(config('app.url'), PHP_URL_HOST),
+            'basePath'    => '/',
+            'schemes'     => ['http', 'https'],
+            'paths'       => [],
             'definitions' => [],
         ];
 
         foreach ($models as $modelClass) {
-            $modelInstance = new $modelClass;
+            $modelInstance = new $modelClass();
 
-            $modelName = class_basename($modelClass);
-            $modelSlug = Str::kebab(Str::plural($modelName));
+            $modelName     = class_basename($modelClass);
+            $modelSlug     = Str::kebab(Str::plural($modelName));
             $modelEndpoint = '/' . $modelSlug;
 
             // Generate paths for index, store, show, update, delete
@@ -108,36 +109,36 @@ class GenerateDocsCommand extends Command
         // Index and Store
         $paths[$modelEndpoint] = [
             'get' => [
-                'tags' => [$modelName],
-                'summary' => 'Get a list of ' . Str::plural($modelName),
+                'tags'       => [$modelName],
+                'summary'    => 'Get a list of ' . Str::plural($modelName),
                 'parameters' => [
                     [
-                        'name' => 'filter',
-                        'in' => 'query',
-                        'required' => false,
-                        'type' => 'string',
+                        'name'        => 'filter',
+                        'in'          => 'query',
+                        'required'    => false,
+                        'type'        => 'string',
                         'description' => 'Filter parameters',
                     ],
                     [
-                        'name' => 'sort',
-                        'in' => 'query',
-                        'required' => false,
-                        'type' => 'string',
+                        'name'        => 'sort',
+                        'in'          => 'query',
+                        'required'    => false,
+                        'type'        => 'string',
                         'description' => 'Sort parameters',
                     ],
                     [
-                        'name' => 'per_page',
-                        'in' => 'query',
-                        'required' => false,
-                        'type' => 'integer',
+                        'name'        => 'per_page',
+                        'in'          => 'query',
+                        'required'    => false,
+                        'type'        => 'integer',
                         'description' => 'Number of results per page',
                     ],
                 ],
                 'responses' => [
                     '200' => [
                         'description' => 'Successful response',
-                        'schema' => [
-                            'type' => 'array',
+                        'schema'      => [
+                            'type'  => 'array',
                             'items' => [
                                 '$ref' => '#/definitions/' . $modelName,
                             ],
@@ -146,14 +147,14 @@ class GenerateDocsCommand extends Command
                 ],
             ],
             'post' => [
-                'tags' => [$modelName],
-                'summary' => 'Create a new ' . $modelName,
+                'tags'       => [$modelName],
+                'summary'    => 'Create a new ' . $modelName,
                 'parameters' => [
                     [
-                        'name' => 'body',
-                        'in' => 'body',
+                        'name'     => 'body',
+                        'in'       => 'body',
                         'required' => true,
-                        'schema' => [
+                        'schema'   => [
                             '$ref' => '#/definitions/' . $modelName,
                         ],
                     ],
@@ -161,7 +162,7 @@ class GenerateDocsCommand extends Command
                 'responses' => [
                     '201' => [
                         'description' => 'Resource created',
-                        'schema' => [
+                        'schema'      => [
                             '$ref' => '#/definitions/' . $modelName,
                         ],
                     ],
@@ -172,42 +173,42 @@ class GenerateDocsCommand extends Command
         // Show, Update, Delete
         $paths[$modelEndpoint . '/{id}'] = [
             'get' => [
-                'tags' => [$modelName],
-                'summary' => 'Get a specific ' . $modelName,
+                'tags'       => [$modelName],
+                'summary'    => 'Get a specific ' . $modelName,
                 'parameters' => [
                     [
-                        'name' => 'id',
-                        'in' => 'path',
-                        'required' => true,
-                        'type' => 'integer',
+                        'name'        => 'id',
+                        'in'          => 'path',
+                        'required'    => true,
+                        'type'        => 'integer',
                         'description' => 'ID of the ' . $modelName,
                     ],
                 ],
                 'responses' => [
                     '200' => [
                         'description' => 'Successful response',
-                        'schema' => [
+                        'schema'      => [
                             '$ref' => '#/definitions/' . $modelName,
                         ],
                     ],
                 ],
             ],
             'put' => [
-                'tags' => [$modelName],
-                'summary' => 'Update a specific ' . $modelName,
+                'tags'       => [$modelName],
+                'summary'    => 'Update a specific ' . $modelName,
                 'parameters' => [
                     [
-                        'name' => 'id',
-                        'in' => 'path',
-                        'required' => true,
-                        'type' => 'integer',
+                        'name'        => 'id',
+                        'in'          => 'path',
+                        'required'    => true,
+                        'type'        => 'integer',
                         'description' => 'ID of the ' . $modelName,
                     ],
                     [
-                        'name' => 'body',
-                        'in' => 'body',
+                        'name'     => 'body',
+                        'in'       => 'body',
                         'required' => true,
-                        'schema' => [
+                        'schema'   => [
                             '$ref' => '#/definitions/' . $modelName,
                         ],
                     ],
@@ -215,21 +216,21 @@ class GenerateDocsCommand extends Command
                 'responses' => [
                     '200' => [
                         'description' => 'Resource updated',
-                        'schema' => [
+                        'schema'      => [
                             '$ref' => '#/definitions/' . $modelName,
                         ],
                     ],
                 ],
             ],
             'delete' => [
-                'tags' => [$modelName],
-                'summary' => 'Delete a specific ' . $modelName,
+                'tags'       => [$modelName],
+                'summary'    => 'Delete a specific ' . $modelName,
                 'parameters' => [
                     [
-                        'name' => 'id',
-                        'in' => 'path',
-                        'required' => true,
-                        'type' => 'integer',
+                        'name'        => 'id',
+                        'in'          => 'path',
+                        'required'    => true,
+                        'type'        => 'integer',
                         'description' => 'ID of the ' . $modelName,
                     ],
                 ],
@@ -246,18 +247,18 @@ class GenerateDocsCommand extends Command
 
     protected function generateModelDefinition($modelClass)
     {
-        $modelInstance = new $modelClass;
-        $table = $modelInstance->getTable();
+        $modelInstance = new $modelClass();
+        $table         = $modelInstance->getTable();
 
         // Get the columns of the table using Schema facade directly
         try {
-            $columns = Schema::getColumnListing($table);
+            $columns    = Schema::getColumnListing($table);
             $properties = [];
 
             foreach ($columns as $column) {
                 try {
                     // Get column type
-                    $type = Schema::getColumnType($table, $column);
+                    $type        = Schema::getColumnType($table, $column);
                     $swaggerType = $this->mapColumnTypeToSwaggerType($type);
 
                     $properties[$column] = [
@@ -266,14 +267,14 @@ class GenerateDocsCommand extends Command
                 } catch (\Exception $e) {
                     Log::warning("Could not determine type for column {$column} in table {$table}");
                     $properties[$column] = [
-                        'type' => 'string'
+                        'type' => 'string',
                     ];
                 }
             }
 
             // Handle relationships
             $reflection = new ReflectionClass($modelClass);
-            $methods = $reflection->getMethods(\ReflectionMethod::IS_PUBLIC);
+            $methods    = $reflection->getMethods(\ReflectionMethod::IS_PUBLIC);
 
             foreach ($methods as $method) {
                 if ($method->class != $modelClass || $method->getNumberOfParameters() > 0) {
@@ -284,9 +285,9 @@ class GenerateDocsCommand extends Command
                     $return = $method->invoke($modelInstance);
 
                     if ($return instanceof \Illuminate\Database\Eloquent\Relations\Relation) {
-                        $relationName = $method->getName();
+                        $relationName      = $method->getName();
                         $relatedModelClass = get_class($return->getRelated());
-                        $relatedModelName = class_basename($relatedModelClass);
+                        $relatedModelName  = class_basename($relatedModelClass);
 
                         $properties[$relationName] = [
                             'type' => 'object',
@@ -300,15 +301,15 @@ class GenerateDocsCommand extends Command
             }
 
             return [
-                'type' => 'object',
+                'type'       => 'object',
                 'properties' => $properties,
             ];
-
         } catch (\Exception $e) {
             Log::error("Failed to generate model definition for {$modelClass}: " . $e->getMessage());
+
             return [
-                'type' => 'object',
-                'properties' => []
+                'type'       => 'object',
+                'properties' => [],
             ];
         }
     }
@@ -316,13 +317,13 @@ class GenerateDocsCommand extends Command
     protected function mapColumnTypeToSwaggerType($type)
     {
         $mapping = [
-            'string' => 'string',
-            'integer' => 'integer',
-            'boolean' => 'boolean',
-            'date' => 'string',
+            'string'   => 'string',
+            'integer'  => 'integer',
+            'boolean'  => 'boolean',
+            'date'     => 'string',
             'datetime' => 'string',
-            'float' => 'number',
-            'text' => 'string',
+            'float'    => 'number',
+            'text'     => 'string',
             // Add other mappings as needed
         ];
 
