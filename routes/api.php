@@ -1,44 +1,26 @@
 <?php
 
-use Illuminate\Support\Facades\{File, Route};
-use Illuminate\Support\Str;
-use Thinkneverland\Evolve\Core\Contracts\EvolveModelInterface;
+use Illuminate\Support\Facades\Route;
+use Thinkneverland\Evolve\Api\Http\Controllers\{EvolveApiController, DocsController};
 
-$models    = [];
-$modelPath = app_path('Models');
+Route::prefix(config('evolve-api.route_prefix'))->group(function () {
+    // Documentation routes
+    if (config('evolve-api.docs.enabled')) {
+        Route::get('docs', [DocsController::class, 'show'])
+            ->name('evolve-api.docs')
+            ->middleware(config('evolve-api.docs.middleware'));
 
-foreach (File::allFiles($modelPath) as $file) {
-    $namespace = app()->getNamespace() . 'Models\\';
-    $class     = $namespace . str_replace(['/', '.php'], ['\\', ''], $file->getRelativePathname());
-
-    if (class_exists($class) && in_array(EvolveModelInterface::class, class_implements($class))) {
-        if ($class::shouldEvolve()) {
-            $models[] = $class;
-        }
+        Route::get('docs.json', [DocsController::class, 'json'])
+            ->name('evolve-api.docs.json')
+            ->middleware(config('evolve-api.docs.middleware'));
     }
-}
 
-foreach ($models as $modelClass) {
-    $modelSlug       = Str::plural(Str::kebab(class_basename($modelClass)));
-    $controllerClass = 'Thinkneverland\\Evolve\\Api\\Http\\Controllers\\EvolveApiController';
-
-    Route::post("/{$modelSlug}", [$controllerClass, 'store'])
-        ->name("{$modelSlug}.store")
-        ->defaults('modelClass', $modelClass);
-
-    Route::get("/{$modelSlug}", [$controllerClass, 'index'])
-        ->name("{$modelSlug}.index")
-        ->defaults('modelClass', $modelClass);
-
-    Route::get("/{$modelSlug}/{id}", [$controllerClass, 'show'])
-        ->name("{$modelSlug}.show")
-        ->defaults('modelClass', $modelClass);
-
-    Route::put("/{$modelSlug}/{id}", [$controllerClass, 'update'])
-        ->name("{$modelSlug}.update")
-        ->defaults('modelClass', $modelClass);
-
-    Route::delete("/{$modelSlug}/{id}", [$controllerClass, 'destroy'])
-        ->name("{$modelSlug}.destroy")
-        ->defaults('modelClass', $modelClass);
-}
+    // API routes
+    Route::group(['middleware' => ['api']], function () {
+        Route::get('{modelClass}', [EvolveApiController::class, 'index']);
+        Route::post('{modelClass}', [EvolveApiController::class, 'store']);
+        Route::get('{modelClass}/{id}', [EvolveApiController::class, 'show']);
+        Route::put('{modelClass}/{id}', [EvolveApiController::class, 'update']);
+        Route::delete('{modelClass}/{id}', [EvolveApiController::class, 'destroy']);
+    })->where(['modelClass' => '[a-zA-Z0-9-_]+', 'id' => '[0-9]+']);
+});

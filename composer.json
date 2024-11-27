@@ -1,20 +1,21 @@
 {
     "name": "thinkneverland/evolve-api",
-    "description": "",
+    "description": "RESTful API functionality for the Evolve Core package",
     "license": "MIT",
-    "version": "0.1.0",
     "authors": [
         {
-            "name": "Think Nneverland",
-            "email": "hello@ethinkneverland.com",
+            "name": "Think Neverland",
+            "email": "hello@thinkneverland.com",
             "homepage": "https://evolve.thinkneverland.com"
         }
     ],
     "homepage": "https://github.com/thinkneverland/evolve-api",
-    "keywords": ["Laravel", "EvolveApi"],
+    "keywords": ["Laravel", "EvolveApi", "API", "Documentation"],
     "require": {
+        "php": "^8.1",
+        "laravel/framework": "^10.0|^11.0",
         "thinkneverland/evolve-core": "*",
-        "darkaonline/l5-swagger": "^8.0"
+        "swagger-api/swagger-ui": "^5.0"
     },
     "autoload": {
         "psr-4": {
