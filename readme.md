@@ -1,333 +1,406 @@
-# EvolveAPI: Free Extension for EvolveCore
 
-EvolveAPI is a **free plugin** that extends the capabilities of the **EvolveCore** package by providing a robust API layer. It allows you to expose your models as API endpoints with minimal configuration, making it easy to integrate your application with external systems or build rich frontend experiences.
+# Evolve API Documentation
 
-> **Note:** EvolveAPI requires the **EvolveCore** package to function.  
-> [Get EvolveCore](https://evolve.thinkneverland.com) today and start building powerful APIs for your Laravel applications.
+## Overview
+A RESTful API generator for Laravel Evolve models with built-in optimization, validation, and documentation.
 
-### Why Use EvolveAPI?
-- Automatically generate API endpoints for your models.
-- Support for filtering, sorting, and pagination out of the box.
-- Seamless integration with EvolveCore for validation and data handling.
-
-**Visit [evolve.thinkneverland.com](https://evolve.thinkneverland.com) to learn more and get started!**
-
-# EvolveAPI Documentation
-
-## Navigation
-- [Core](./evolve-core-documentation)
-- [API](./evolve-api-documentation)
-- [UI](./evolve-UI-documentation)
-
-## EvolveAPI (Optional Free Extension)
-
-### Quick Links
-- [Getting Started](#getting-started)
-- [API Reference](#api-reference)
-- [Advanced Usage](#advanced)
-
-## Contents
-1. [Getting Started](#getting-started)
-    - [Requirements](#requirements)
-    - [Installation](#installation)
-    - [Configuration](#configuration)
-2. [Model Setup](#model-setup)
-    - [Basic Model](#basic-model)
-    - [Advanced Features](#advanced-model)
-3. [API Reference](#api-reference)
-    - [Endpoints](#endpoints)
-    - [Parameters](#parameters)
-    - [Responses](#responses)
-4. [Advanced Usage](#advanced)
-    - [Hook Methods](#hooks)
-    - [Events](#events)
-    - [Complex Examples](#examples)
+## Table of Contents
+1. [Installation & Setup](#installation--setup)
+2. [Basic Usage](#basic-usage)
+3. [API Endpoints](#api-endpoints)
+    - [Listing Resources](#listing-resources)
+    - [Retrieving Resources](#retrieving-resources)
+    - [Creating Resources](#creating-resources)
+    - [Updating Resources](#updating-resources)
+    - [Deleting Resources](#deleting-resources)
+4. [Query Parameters](#query-parameters)
+    - [Filtering](#filtering)
+    - [Sorting](#sorting)
+    - [Including Relations](#including-relations)
+    - [Pagination](#pagination)
+    - [Selecting Fields](#selecting-fields)
+5. [Response Format](#response-format)
+    - [Success Responses](#success-responses)
+    - [Error Responses](#error-responses)
+    - [Metadata](#metadata)
+6. [Advanced Usage](#advanced-usage)
+    - [Custom Endpoints](#custom-endpoints)
+    - [Request/Response Hooks](#requestresponse-hooks)
+    - [Custom Validation](#custom-validation)
+    - [Authorization](#authorization)
 
 ---
 
-## Getting Started
+## Installation & Setup
 
-### 1.1 Requirements
+First, install the package via Composer:
 
-- PHP `^7.4|^8.0`
-- Laravel `^8.0|^9.0`
-- `thinkneverland/evolve-core`
-- `darkaonline/l5-swagger ^8.0`
-
----
-
-### 1.2 Installation
-
-Install the EvolveAPI package using Composer:
-
-```sh
+```bash
 composer require thinkneverland/evolve-api
 ```
 
-The service provider will be automatically registered. To publish the package assets, use the following command:
+Publish the configuration file:
 
-```sh
-php artisan vendor:publish --provider="Thinkneverland\Evolve\Api\Providers\EvolveApiServiceProvider"
+```bash
+php artisan vendor:publish --provider="Thinkneverland\Evolve\Api\EvolveApiServiceProvider"
 ```
 
----
-
-### 1.3 Configuration
-
-Update the configuration file located at `config/evolve-api.php`:
+Configure your API settings in `config/evolve-api.php`:
 
 ```php
 return [
-    'route_prefix' => 'evolve-api',    // API route prefix
-    'middleware' => ['api'],           // Add custom middleware
-    'avoid_duplicates' => false,       // Global duplicate prevention
+    'route_prefix' => 'api',
+    'responses' => [
+        'include_meta' => true,
+        'wrap_response' => true,
+    ],
+    'docs' => [
+        'enabled' => true,
+        'route' => 'docs',
+        'title' => 'API Documentation',
+    ],
 ];
 ```
 
-
-## Model Setup
-
-### 2.1 Basic Model
-
-Set up your model with the minimum required configuration:
-
-```php
-namespace App\Models;
-
-use Illuminate\Database\Eloquent\Model;
-use Thinkneverland\Evolve\Core\Traits\SortableFilterableTrait;
-
-class Product extends Model
-{
-    use SortableFilterableTrait;
-
-    protected $fillable = [
-        'name',
-        'price',
-        'description'
-    ];
-
-    protected $filterable = [
-        'name',
-        'price'
-    ];
-
-    protected $sortable = [
-        'name',
-        'price',
-        'created_at'
-    ];
-}
-```
-
 ---
 
-### 2.2 Advanced Features
+## Basic Usage
 
-Enhance your model with advanced features:
+Make your models API-accessible by implementing the interface and using the trait:
 
 ```php
-class Product extends Model
+use Thinkneverland\Evolve\Core\Traits\Evolvable;
+use Thinkneverland\Evolve\Core\Contracts\EvolveModelInterface;
+
+class Post extends Model implements EvolveModelInterface
 {
-    use SortableFilterableTrait;
+    use Evolvable;
 
-    protected $perPage = 25;
+    protected $fillable = ['title', 'content', 'status'];
 
-    // Define unique fields for duplicate prevention
-    public static function uniqueFields()
-    {
-        return ['sku', 'name'];
-    }
-
-    // Define validation rules
-    public static function getValidationRules($action = 'create', $model = null)
+    public function validationRules(string $action): array
     {
         return [
-            'name' => 'required|string|max:255',
-            'price' => 'required|numeric|min:0',
-            'category_id' => 'required|exists:categories,id'
-        ];
-    }
-
-    // Define relations
-    public function category()
-    {
-        return $this->belongsTo(Category::class);
-    }
-
-    public function tags()
-    {
-        return $this->belongsToMany(Tag::class);
+            'create' => [
+                'title' => 'required|string|max:255',
+                'content' => 'required|string',
+                'status' => 'in:draft,published',
+            ],
+            'update' => [
+                'title' => 'string|max:255',
+                'content' => 'string',
+                'status' => 'in:draft,published',
+            ]
+        ][$action] ?? [];
     }
 }
 ```
 
 ---
 
-## API Reference
+## API Endpoints
 
-### 3.1 Endpoints
+### Listing Resources
 
-| Method   | Endpoint                    | Description          |
-|----------|-----------------------------|----------------------|
-| `GET`    | `/evolve-api/{model}`       | List resources       |
-| `POST`   | `/evolve-api/{model}`       | Create resource      |
-| `GET`    | `/evolve-api/{model}/{id}`  | Get single resource  |
-| `PUT`    | `/evolve-api/{model}/{id}`  | Update resource      |
-| `DELETE` | `/evolve-api/{model}/{id}`  | Delete resource      |
+Get a paginated list of resources:
+
+```bash
+GET /api/posts
+```
+
+Optional query parameters:
+
+- `?page=1` - Page number.
+- `?per_page=15` - Items per page.
+- `?sort=-created_at` - Sort by creation date (descending).
+- `?filter[status]=published` - Filter by status.
 
 ---
 
-### 3.2 Parameters
+### Retrieving Resources
 
-#### Filtering
+Get a single resource by ID:
 
-```sh
-# Basic filter
-GET /evolve-api/products?filter[price]=100
-
-# Operator filter
-GET /evolve-api/products?filter[price][gt]=100
-
-# Multiple filters
-GET /evolve-api/products?filter[price][gt]=100&filter[category]=electronics
-
-# Relation filter
-GET /evolve-api/products?filter[category.name]=Electronics
+```bash
+GET /api/posts/1
 ```
 
-#### Sorting
+Optional parameters:
 
-```sh
-# Single sort
-GET /evolve-api/products?sort=price
+- `?include=author,comments` - Include related resources.
+- `?fields=id,title,content` - Select specific fields.
 
-# Descending sort
-GET /evolve-api/products?sort=-price
+---
 
-# Multiple sort
-GET /evolve-api/products?sort=-price,name
-```
+### Creating Resources
 
-#### Pagination
+Create a new resource:
 
-```sh
-GET /evolve-api/products?page=1&per_page=25
+```bash
+POST /api/posts
+Content-Type: application/json
+
+{
+    "title": "New Post",
+    "content": "This is the content",
+    "status": "draft",
+    "category_id": 1,
+    "tags": [1, 2, 3]
+}
 ```
 
 ---
 
-### 3.3 Responses
+### Updating Resources
 
-Example successful response:
+Update an existing resource:
+
+```bash
+PUT /api/posts/2
+Content-Type: application/json
+
+{
+    "title": "Updated Title",
+    "status": "published"
+}
+```
+
+---
+
+### Deleting Resources
+
+Delete a resource:
+
+```bash
+DELETE /api/posts/2
+```
+
+---
+
+## Query Parameters
+
+### Filtering
+
+```bash
+GET /api/posts?filter[status]=published
+```
+
+### Sorting
+
+```bash
+GET /api/posts?sort=-created_at
+```
+
+### Including Relations
+
+```bash
+GET /api/posts?include=author,comments
+```
+
+### Pagination
+
+```bash
+GET /api/posts?page=2&per_page=15
+```
+
+### Selecting Fields
+
+```bash
+GET /api/posts?fields=id,title,created_at
+```
+
+---
+
+## Response Format
+
+### Success Responses
 
 ```json
 {
-    "success": true,
-    "data": {
-        "id": 1,
-        "name": "Example Product",
-        "price": 99.99,
-        "created_at": "2024-11-14T10:00:00.000000Z",
-        "updated_at": "2024-11-14T10:00:00.000000Z"
-    },
-    "message": "Resource created successfully"
+    "data": {},
+    "meta": {
+        "message": "Operation successful"
+    }
 }
 ```
 
+### Error Responses
+
+```json
+{
+    "error": {
+        "type": "ValidationError",
+        "message": "The given data was invalid.",
+        "details": {
+            "title": ["The title field is required."]
+        }
+    }
+}
+```
+
+### Metadata
+
+```json
+{
+    "meta": {
+        "current_page": 1,
+        "total_pages": 10,
+        "api_version": "1.0"
+    }
+}
+```
 
 ## Advanced Usage
 
-### 4.1 Hook Methods
+### Custom Endpoints
 
-Create a controller to implement custom hooks:
+Add custom endpoints by extending the base controller:
 
 ```php
-namespace App\Http\Controllers\Api;
+use Thinkneverland\Evolve\Api\Http\Controllers\EvolveApiController;
 
-class ProductController
+class PostController extends EvolveApiController
 {
-    public function beforeUpdate($request, &$data, $model)
-    {
-        // Modify data before update
-        $data['modified_by'] = auth()->id();
-    }
+   public function publish($id)
+   {
+       $post = Post::findOrFail($id);
 
-    public function afterUpdate($request, $model)
-    {
-        // Perform actions after update
-        Cache::tags('products')->flush();
-    }
+       $this->authorize('publish', $post);
 
-    public function beforeDelete($request, $model)
-    {
-        if ($model->has_active_orders) {
-            return response()->json([
-                'error' => 'Cannot delete product with active orders'
-            ], 422);
-        }
-    }
+       $post->update(['status' => 'published']);
+
+       return $this->respondWithResource($post, [
+           'message' => 'Post published successfully'
+       ]);
+   }
+
+   public function featured()
+   {
+       $posts = Post::featured()
+           ->withOptimizedQueries()
+           ->paginate();
+
+       return $this->respondWithCollection($posts);
+   }
+}
+
+// Register custom routes
+Route::put('/api/posts/{id}/publish', [PostController::class, 'publish']);
+Route::get('/api/posts/featured', [PostController::class, 'featured']);
+```
+
+### Request/Response Hooks
+
+Customize request handling and response formatting:
+
+```php
+class PostController extends EvolveApiController
+{
+   protected function beforeCreate(Request $request, array $data)
+   {
+       $data['user_id'] = auth()->id();
+       $data['slug'] = Str::slug($data['title']);
+       return $data;
+   }
+
+   protected function afterUpdate(Request $request, $model)
+   {
+       Cache::tags('posts')->flush();
+       event(new PostUpdated($model));
+   }
+
+   protected function transformResource($model)
+   {
+       $data = parent::transformResource($model);
+       $data['read_time'] = $this->calculateReadTime($data['content']);
+       return $data;
+   }
+
+   protected function addResponseMetadata($response)
+   {
+       return array_merge(parent::addResponseMetadata($response), [
+           'last_updated' => Cache::get('posts.last_updated'),
+           'total_posts' => Post::count()
+       ]);
+   }
 }
 ```
 
----
+### Custom Validation
 
-### 4.2 Events
+Define custom validation logic per model:
 
-- `EvolveModelCreated` - Dispatched after model creation.
-- `EvolveModelUpdated` - Dispatched after model update.
-- `EvolveModelDeleted` - Dispatched after model deletion.
-
----
-
-### 4.3 Complex Examples
-
-#### Create with Relations
-
-```json
-POST /evolve-api/products
+```php
+class Post extends Model implements EvolveModelInterface
 {
-    "name": "Premium Laptop",
-    "price": 1299.99,
-    "category": {
-        "name": "Electronics",
-        "slug": "electronics"
-    },
-    "tags": [
-        {"name": "Featured"},
-        {"name": "New Arrival"}
-    ],
-    "specifications": [
-        {
-            "name": "RAM",
-            "value": "16GB"
-        },
-        {
-            "name": "Storage",
-            "value": "512GB SSD"
-        }
-    ]
+   use Evolvable;
+
+   public function validationRules(string $action): array
+   {
+       $rules = [
+           'create' => [
+               'title' => ['required', 'string', 'max:255', 'unique:posts'],
+               'content' => ['required', 'string', 'min:100'],
+               'status' => ['in:draft,published'],
+           ],
+           'update' => [
+               'title' => ['string', 'max:255', Rule::unique('posts')->ignore($this->id)],
+               'content' => ['string', 'min:100'],
+               'status' => ['in:draft,published'],
+           ]
+       ];
+
+       return $rules[$action] ?? [];
+   }
+
+   public function validationMessages(): array
+   {
+       return [
+           'content.min' => 'Posts must be at least 100 characters long.',
+       ];
+   }
 }
 ```
 
-#### Update with Duplicate Prevention
+### Authorization
 
-```json
-PUT /evolve-api/products/1?avoid_duplicates=true
+Implement fine-grained authorization policies:
+
+```php
+class PostPolicy
 {
-    "name": "Updated Product Name",
-    "variants": [
-        {
-            "sku": "PROD-1-VAR-1",
-            "price": 99.99,
-            "attributes": [
-                {
-                    "name": "Color",
-                    "value": "Blue"
-                }
-            ]
-        }
-    ]
+   public function viewAny(User $user): bool
+   {
+       return true;
+   }
+
+   public function view(User $user, Post $post): bool
+   {
+       return $post->status === 'published' || $user->id === $post->user_id;
+   }
+
+   public function create(User $user): bool
+   {
+       return $user->hasVerifiedEmail();
+   }
+
+   public function update(User $user, Post $post): bool
+   {
+       return $user->id === $post->user_id || $user->isAdmin();
+   }
+
+   public function delete(User $user, Post $post): bool
+   {
+       return $user->id === $post->user_id || $user->isAdmin();
+   }
+
+   public function publish(User $user, Post $post): bool
+   {
+       return $user->id === $post->user_id &&
+              $user->hasVerifiedEmail() &&
+              !$user->isBanned();
+   }
 }
 ```
 
+These policies are automatically enforced by the API endpoints.

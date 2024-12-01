@@ -4,16 +4,20 @@ namespace Thinkneverland\Evolve\Api\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
-use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\{DB, Event};
 use Illuminate\Validation\ValidationException;
-use Thinkneverland\Evolve\Core\Events\EvolveModelCreated;
-use Thinkneverland\Evolve\Core\Events\EvolveModelUpdated;
-use Thinkneverland\Evolve\Core\Events\EvolveModelDeleted;
-use Thinkneverland\Evolve\Core\Support\ModelRegistry;
-use Thinkneverland\Evolve\Core\Support\QueryPerformanceBridge;
-use Thinkneverland\Evolve\Core\Support\QueryMonitor;
-use Thinkneverland\Evolve\Core\Support\DatabaseConnectionPool;
-use Thinkneverland\Evolve\Core\Support\ErrorResponseFormatter;
+use Thinkneverland\Evolve\Core\Events\{
+    EvolveModelCreated,
+    EvolveModelUpdated,
+    EvolveModelDeleted
+};
+use Thinkneverland\Evolve\Core\Support\{
+    ModelRegistry,
+    QueryPerformanceBridge,
+    QueryMonitor,
+    DatabaseConnectionPool,
+    ErrorResponseFormatter
+};
 
 class EvolveApiController extends Controller
 {
@@ -23,11 +27,21 @@ class EvolveApiController extends Controller
 
     public function __construct(Request $request)
     {
+        // Skip initialization if we're just listing routes
+        if ($this->isListingRoutes()) {
+            return;
+        }
+
         $modelAlias = $request->route('modelClass');
+
+        if (empty($modelAlias)) {
+            abort(400, "Model identifier is required.");
+        }
+
         $this->modelClass = ModelRegistry::getModelClassByIdentifier($modelAlias);
 
-        if (! $this->modelClass) {
-            abort(400, "Model class not found for identifier '{$modelAlias}'.");
+        if (!$this->modelClass) {
+            abort(404, "Model class not found for identifier '{$modelAlias}'.");
         }
 
         $this->performanceBridge = QueryPerformanceBridge::getInstance();
@@ -35,42 +49,48 @@ class EvolveApiController extends Controller
     }
 
     /**
-     * Display a listing of the resource with optimized query handling.
+     * Check if we're currently listing routes via artisan command
      */
+    protected function isListingRoutes(): bool
+    {
+        return app()->runningInConsole() &&
+            (!isset($_SERVER['argv'][1]) || $_SERVER['argv'][1] === 'route:list');
+    }
+
     public function index(Request $request)
     {
-        $filters    = $request->input('filter', []);
-        $sorts      = $request->input('sort', null);
-        $perPage    = $request->input('per_page', 15);
+        $startTime = microtime(true);
         $connection = null;
 
         try {
-            // Get optimized connection from pool
             $connection = DatabaseConnectionPool::getConnection();
 
-            // Build query using model's evolve method
+            $filters = $request->input('filter', []);
+            $sorts = $request->input('sort', null);
+            $perPage = $request->input('per_page', 15);
+
             $query = $this->modelClass::evolve($filters, $sorts);
 
-            // Paginate the query
             $paginator = $query->paginate($perPage);
 
-            // Load relationships for each model instance
             $paginator->getCollection()->each(function ($modelInstance) {
                 $modelInstance->load($modelInstance->getAllRelations());
             });
 
-            // Transform each model instance to DTO
             $paginator->setCollection(
                 $paginator->getCollection()->map(function ($modelInstance) {
                     return $modelInstance->toDTO();
                 })
             );
 
+            $duration = microtime(true) - $startTime;
+            $this->recordMetrics('index', null, $duration);
+
             DatabaseConnectionPool::releaseConnection($connection);
 
             return response()->json([
                 'success' => true,
-                'data'    => $paginator,
+                'data' => $paginator,
                 'message' => null,
             ]);
 
@@ -81,8 +101,8 @@ class EvolveApiController extends Controller
 
             $this->queryMonitor->recordError([
                 'operation' => 'index',
-                'model'     => $this->modelClass,
-                'error'     => $e->getMessage(),
+                'model' => $this->modelClass,
+                'error' => $e->getMessage(),
             ]);
 
             return response()->json(
@@ -95,25 +115,17 @@ class EvolveApiController extends Controller
         }
     }
 
-    /**
-     * Store a newly created resource with enhanced error handling
-     */
     public function store(Request $request)
     {
-        $avoidDuplicates = $request->boolean('avoid_duplicates', false);
+        $startTime = microtime(true);
         $connection = null;
 
         try {
-            // Begin optimized transaction
             $this->performanceBridge->beginTransaction();
-
-            // Get connection from pool
             $connection = DatabaseConnectionPool::getConnection();
 
-            // Instantiate the model
             $modelInstance = new $this->modelClass;
 
-            // Validate with optimized rules
             try {
                 $validated = $request->validate($modelInstance->getValidationRules('create'));
             } catch (ValidationException $e) {
@@ -123,19 +135,16 @@ class EvolveApiController extends Controller
                 );
             }
 
-            // Process beforeCreate hook if available
             $hookResponse = $this->runHook('beforeCreate', $request, $validated);
             if ($hookResponse) return $hookResponse;
 
-            // Save model with optimized relation handling
             $modelInstance = $this->saveModelWithRelations(
                 $this->modelClass,
                 $validated,
                 null,
-                $avoidDuplicates
+                $request->boolean('avoid_duplicates', false)
             );
 
-            // Process afterCreate hook
             $this->runHook('afterCreate', $request, $modelInstance);
 
             $this->performanceBridge->commitTransaction();
@@ -144,6 +153,9 @@ class EvolveApiController extends Controller
             $modelInstance->load($modelInstance->getAllRelations());
 
             Event::dispatch(new EvolveModelCreated($modelInstance));
+
+            $duration = microtime(true) - $startTime;
+            $this->recordMetrics('store', $modelInstance, $duration);
 
             return response()->json([
                 'success' => true,
@@ -173,27 +185,25 @@ class EvolveApiController extends Controller
         }
     }
 
-    /**
-     * Display the specified resource with optimized query handling.
-     */
-    public function show($model, $id)
+    public function show(Request $request)
     {
+        $startTime = microtime(true);
         $connection = null;
 
         try {
             $connection = DatabaseConnectionPool::getConnection();
 
-            // Retrieve the model instance
-            $modelInstance = $this->modelClass::findOrFail($id);
-
-            // Load all relationships
+            $modelInstance = $this->modelClass::findOrFail($request->id);
             $modelInstance->load($modelInstance->getAllRelations());
+
+            $duration = microtime(true) - $startTime;
+            $this->recordMetrics('show', $modelInstance, $duration);
 
             DatabaseConnectionPool::releaseConnection($connection);
 
             return response()->json([
                 'success' => true,
-                'data'    => $modelInstance->toDTO(),
+                'data' => $modelInstance->toDTO(),
                 'message' => null
             ]);
 
@@ -204,9 +214,9 @@ class EvolveApiController extends Controller
 
             $this->queryMonitor->recordError([
                 'operation' => 'show',
-                'model'     => $this->modelClass,
-                'id'        => $id,
-                'error'     => $e->getMessage()
+                'model' => $this->modelClass,
+                'id' => $request->id,
+                'error' => $e->getMessage()
             ]);
 
             return response()->json(
@@ -219,22 +229,20 @@ class EvolveApiController extends Controller
         }
     }
 
-    /**
-     * Update the specified resource with enhanced error handling
-     */
-    public function update(Request $request, $id)
+    public function update(Request $request)
     {
+        $startTime = microtime(true);
         $connection = null;
 
         try {
             $this->performanceBridge->beginTransaction();
             $connection = DatabaseConnectionPool::getConnection();
 
-            $modelInstance = $this->modelClass::findOrFail($id);
+            $modelInstance = $this->modelClass::findOrFail($request->id);
 
             try {
                 $validated = $request->validate(
-                    $this->modelClass::getValidationRules('update', $modelInstance)
+                    $modelInstance->getValidationRules('update')
                 );
             } catch (ValidationException $e) {
                 return response()->json(
@@ -243,12 +251,10 @@ class EvolveApiController extends Controller
                 );
             }
 
-            // Process beforeUpdate hook
             $hookResponse = $this->runHook('beforeUpdate', $request, $validated, $modelInstance);
             if ($hookResponse) return $hookResponse;
 
-            // Update model with optimized relation handling
-            $this->saveModelWithRelations(
+            $modelInstance = $this->saveModelWithRelations(
                 $this->modelClass,
                 $validated,
                 $modelInstance
@@ -259,14 +265,16 @@ class EvolveApiController extends Controller
 
             $modelInstance->load($modelInstance->getAllRelations());
 
-            // Process afterUpdate hook
             $this->runHook('afterUpdate', $request, $modelInstance);
 
             Event::dispatch(new EvolveModelUpdated($modelInstance));
 
+            $duration = microtime(true) - $startTime;
+            $this->recordMetrics('update', $modelInstance, $duration);
+
             return response()->json([
                 'success' => true,
-                'data' => $modelInstance->toDto(),
+                'data' => $modelInstance->toDTO(),
                 'message' => 'Resource updated successfully.'
             ]);
 
@@ -279,7 +287,7 @@ class EvolveApiController extends Controller
             $this->queryMonitor->recordError([
                 'operation' => 'update',
                 'model' => $this->modelClass,
-                'id' => $id,
+                'id' => $request->id,
                 'error' => $e->getMessage()
             ]);
 
@@ -293,20 +301,17 @@ class EvolveApiController extends Controller
         }
     }
 
-    /**
-     * Remove the specified resource with optimized transaction handling.
-     */
-    public function destroy($model,$id)
+    public function destroy(Request $request)
     {
+        $startTime = microtime(true);
         $connection = null;
 
         try {
             $this->performanceBridge->beginTransaction();
             $connection = DatabaseConnectionPool::getConnection();
 
-            $modelInstance = $this->modelClass::findOrFail($id);
+            $modelInstance = $this->modelClass::findOrFail($request->id);
 
-            // Process beforeDelete hook
             $hookResponse = $this->runHook('beforeDelete', request(), $modelInstance);
             if ($hookResponse) return $hookResponse;
 
@@ -315,10 +320,12 @@ class EvolveApiController extends Controller
             $this->performanceBridge->commitTransaction();
             DatabaseConnectionPool::releaseConnection($connection);
 
-            // Process afterDelete hook
             $this->runHook('afterDelete', request(), $modelInstance);
 
             Event::dispatch(new EvolveModelDeleted($modelInstance));
+
+            $duration = microtime(true) - $startTime;
+            $this->recordMetrics('destroy', $modelInstance, $duration);
 
             return response()->json([
                 'success' => true,
@@ -334,7 +341,7 @@ class EvolveApiController extends Controller
             $this->queryMonitor->recordError([
                 'operation' => 'destroy',
                 'model' => $this->modelClass,
-                'id' => $id,
+                'id' => $request->id,
                 'error' => $e->getMessage()
             ]);
 
@@ -348,15 +355,10 @@ class EvolveApiController extends Controller
         }
     }
 
-    /**
-     * Save model with optimized relation handling.
-     */
     protected function saveModelWithRelations($modelClass, array $data, $existingModel = null, bool $avoidDuplicates = false)
     {
-        // Create an instance of the model
+        $startTime = microtime(true);
         $modelInstance = new $modelClass;
-
-        // Extract relations for optimized processing
         $relations = array_keys($modelInstance->getAllRelations());
         $attributes = array_diff_key($data, array_flip($relations));
 
@@ -373,7 +375,6 @@ class EvolveApiController extends Controller
             $existingModel = $query->first();
         }
 
-        // Create or update model
         if ($existingModel) {
             $existingModel->update($attributes);
             $modelInstance = $existingModel;
@@ -381,18 +382,91 @@ class EvolveApiController extends Controller
             $modelInstance = $modelClass::create($attributes);
         }
 
-        // Process relations in optimized batches
         foreach ($relations as $relation) {
             if (isset($data[$relation])) {
                 $this->processOptimizedRelation($modelInstance, $relation, $data[$relation], $avoidDuplicates);
             }
         }
 
+        $duration = microtime(true) - $startTime;
+        $this->recordQueryMetrics(
+            $modelInstance->toSql(),
+            $modelInstance->getBindings(),
+            $duration
+        );
+
         return $modelInstance;
     }
-    /**
-     * Process relations with optimization.
-     */
+
+    protected function recordMetrics(string $action, $model, float $duration): void
+    {
+        try {
+            DB::table('evolve_performance_metrics')->insert([
+                'model_class' => $model ? get_class($model) : $this->modelClass,
+                'action' => $action,
+                'count' => 1,
+                'avg_time' => $duration,
+                'max_time' => $duration,
+                'min_time' => $duration,
+                'memory_usage' => memory_get_usage(true),
+                'context' => json_encode([
+                    'user_id' => auth()->id(),
+                    'timestamp' => microtime(true),
+                    'request_id' => request()->id(),
+                ]),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } catch (\Exception $e) {
+            report($e);
+        }
+    }
+
+    protected function recordQueryMetrics(string $query, array $bindings, float $duration): void
+    {
+        try {
+            $queryHash = md5($query . serialize($bindings));
+
+            DB::table('evolve_query_metrics')->updateOrInsert(
+                ['query_hash' => $queryHash],
+                [
+                    'query' => $query,
+                    'execution_count' => DB::raw('execution_count + 1'),
+                    'avg_duration' => DB::raw("((avg_duration * execution_count) + $duration) / (execution_count + 1)"),
+                    'max_duration' => DB::raw("GREATEST(max_duration, $duration)"),
+                    'min_duration' => DB::raw("LEAST(min_duration, $duration)"),
+                    'bindings' => json_encode($bindings),
+                    'context' => json_encode([
+                        'user_id' => auth()->id(),
+                        'timestamp' => microtime(true),
+                        'request_id' => request()->id(),
+                    ]),
+                    'updated_at' => now(),
+                ]
+            );
+
+            if ($duration >= config('evolve.monitoring.slow_query_threshold', 1.0)) {
+                DB::table('evolve_slow_queries')->insert([
+                    'query_hash' => $queryHash,
+                    'query' => $query,
+                    'duration' => $duration,
+                    'bindings' => json_encode($bindings),
+                    'context' => json_encode([
+                        'user_id' => auth()->id(),
+                        'timestamp' => microtime(true),
+                        'request_id' => request()->id(),
+                        'trace' => debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS),
+                    ]),
+                    'occurred_at' => now(),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+        } catch (\Exception $e) {
+            report($e);
+        }
+    }
+
     protected function processOptimizedRelation($modelInstance, string $relation, array $relationData, bool $avoidDuplicates): void
     {
         $relationMethod = $modelInstance->$relation();
@@ -401,13 +475,10 @@ class EvolveApiController extends Controller
         if ($relationMethod instanceof \Illuminate\Database\Eloquent\Relations\BelongsToMany) {
             $this->processBelongsToManyRelation($relationMethod, $relationData, $avoidDuplicates);
         } else {
-            $this->processRegularRelation($relationMethod, $relationData, $avoidDuplicates, $relatedModelClass);
+$this->processRegularRelation($relationMethod, $relationData, $avoidDuplicates, $relatedModelClass);
         }
     }
 
-    /**
-     * Process BelongsToMany relations with optimization.
-     */
     protected function processBelongsToManyRelation($relationMethod, array $relationData, bool $avoidDuplicates): void
     {
         $relatedIds = [];
@@ -428,9 +499,6 @@ class EvolveApiController extends Controller
         $relationMethod->sync($relatedIds);
     }
 
-    /**
-     * Process regular relations with optimization.
-     */
     protected function processRegularRelation($relationMethod, array $relationData, bool $avoidDuplicates, string $relatedModelClass): void
     {
         foreach (array_chunk($relationData, 1000) as $chunk) {
@@ -466,9 +534,6 @@ class EvolveApiController extends Controller
         }
     }
 
-    /**
-     * Run hook methods with performance monitoring.
-     */
     protected function runHook(string $hookName, Request $request, &$data, $modelInstance = null)
     {
         $hookClass = $this->getHookClass();
@@ -506,12 +571,7 @@ class EvolveApiController extends Controller
         return null;
     }
 
-
-
-        /**
-         * Get the hook class if it exists.
-         */
-        protected function getHookClass()
+    protected function getHookClass()
     {
         $hookClassName = 'App\\Http\\Controllers\\Api\\' . class_basename($this->modelClass) . 'Controller';
 
