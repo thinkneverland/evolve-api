@@ -25,7 +25,8 @@
     "extra": {
         "laravel": {
             "providers": [
-                "Thinkneverland\\Evolve\\Api\\EvolveApiServiceProvider"
+                "Thinkneverland\\Evolve\\Api\\EvolveApiServiceProvider",
+                "Thinkneverland\\Evolve\\Api\\Providers\\EvolveApiLogServiceProvider"
             ]
         }
     }
